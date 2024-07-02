@@ -9,6 +9,10 @@ ipykernel = "*"
 matplotlib = "*"
 ydata-profiling = "*"
 scikit-learn = "*"
+mlflow = "*"
+prefect = {extras = ["server"], version = "*"}
+prefect-dask = "*"
+bokeh = "!=3.0.*,>=2.4.2"
 
 [dev-packages]
 
