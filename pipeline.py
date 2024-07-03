@@ -1,48 +1,60 @@
-from prefect import task, flow
-from prefect_dask.task_runners import DaskTaskRunner
+import os
+import yaml
 from prefect.deployments import Deployment
+from prefect.filesystems import LocalFileSystem
 from prefect.client.schemas.schedules import IntervalSchedule
 from datetime import timedelta
-import subprocess
+from ds_profiling import data_profiling_pipeline
+from data_prep import data_preparation_pipeline
+from utils import load_config
 
-@task
-def run_ds_profiling():
-    """Run the data profiling script."""
-    subprocess.run(["python", "ds_profiling.py"])
+def load_config(config_file="config.yaml"):
+    with open(config_file, 'r') as file:
+        config = yaml.safe_load(file)
+    return config
 
-@task
-def run_data_prep():
-    """Run the data preparation script."""
-    subprocess.run(["python", "data_prep.py"])
-
-@task
-def run_model_training():
-    """Run the model training script."""
-    subprocess.run(["python", "model_training.py"])
-
-@flow(name="earthquake_data_pipeline", task_runner=DaskTaskRunner())
-def earthquake_data_pipeline():
-    profiling_task = run_ds_profiling()
-    data_prep_task = run_data_prep()
-    model_training_task = run_model_training()
-
-# Function to register the deployment
 def register_deployment():
-    # Schedule the flow to run daily
-    schedule = IntervalSchedule(interval=timedelta(days=1))
+    config = load_config()
 
-    # Create a deployment with the schedules list
-    deployment = Deployment.build_from_flow(
-        flow=earthquake_data_pipeline,
-        name="daily-schedule",
-        schedules=[schedule]
+    # Dynamically set up LocalFileSystem storage using config file
+    storage_path = config['storage']['basepath']
+    if not os.path.exists(storage_path):
+        raise FileNotFoundError(f"Storage path {storage_path} does not exist.")
+    
+    storage = LocalFileSystem(basepath=storage_path)
+    storage.save("prefect-storage")
+
+    # Schedule the data profiling flow
+    profiling_schedule = IntervalSchedule(interval=timedelta(days=1))
+    profiling_deployment = Deployment.build_from_flow(
+        flow=data_profiling_pipeline,
+        name="data_profiling_schedule",
+        schedules=[profiling_schedule],  # Use schedules list
+        storage=storage,
+        parameters={
+            "storage_basepath": storage_path,
+            "input_file": os.path.join(storage_path, "raw/Earthquakes-1990-2023.csv"),
+            "output_file": os.path.join(storage_path, "processed/earthquake_data_profile.html")
+        },
+        ignore_file=".prefectignore"
     )
+    profiling_deployment.apply()
 
-    # Register the deployment
-    deployment.apply()
+    # Schedule the data preparation flow
+    preparation_schedule = IntervalSchedule(interval=timedelta(days=1))
+    preparation_deployment = Deployment.build_from_flow(
+        flow=data_preparation_pipeline,
+        name="data_preparation_schedule",
+        schedules=[preparation_schedule],  # Use schedules list
+        storage=storage,
+        parameters={
+            "storage_basepath": storage_path
+        },
+        ignore_file=".prefectignore"
+    )
+    preparation_deployment.apply()
 
-    # Print confirmation
-    print("Flow 'earthquake_data_pipeline' with deployment 'daily-schedule' was registered successfully.")
+    print("Flows 'data_profiling_pipeline' and 'data_preparation_pipeline' were registered successfully.")
 
 if __name__ == "__main__":
     register_deployment()
