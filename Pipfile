@@ -13,8 +13,15 @@ mlflow = "*"
 prefect = {extras = ["server"], version = "*"}
 prefect-dask = "*"
 bokeh = "!=3.0.*,>=2.4.2"
+numpy = "*"
+joblib = "*"
+google-cloud-storage = "*"
+pyyaml = "*"
 
 [dev-packages]
+pytest = "*"
+black = "*"
+flake8 = "*"
 
 [requires]
 python_version = "3.10"
