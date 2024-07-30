@@ -18,12 +18,14 @@ joblib = "*"
 google-cloud-storage = "*"
 pyyaml = "*"
 evidently = "==0.2.8"
+xgboost = "*"
 
 [dev-packages]
 pytest = "*"
 black = "*"
 flake8 = "*"
 pre-commit = "*"
+pytest-cov = "*"
 
 [requires]
 python_version = "3.10"

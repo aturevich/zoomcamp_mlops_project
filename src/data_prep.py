@@ -9,6 +9,9 @@ from prefect import task, flow
 @task
 def load_data(filepath):
     """Load the data from a CSV file."""
+    print(f"Attempting to load data from: {filepath}")
+    print(f"Current working directory: {os.getcwd()}")
+    print(f"Directory contents: {os.listdir('data/raw')}")
     data = pd.read_csv(filepath)
     return data
 
@@ -42,16 +45,8 @@ def remove_duplicates(data):
 
 
 @task
-def save_data(data, output_filepath):
-    """Save the filtered dataset to a new CSV file."""
-    os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
-    data.to_csv(output_filepath, index=False)
-
-
-@task
 def create_datetime_features(data):
     data["datetime"] = pd.to_datetime(data["date"], format="ISO8601")
-    data["datetime"] = pd.to_datetime(data["datetime"])
     data["year"] = data["datetime"].dt.year
     data["month"] = data["datetime"].dt.month
     data["day"] = data["datetime"].dt.day
@@ -112,12 +107,16 @@ def create_interaction_features(data):
     return data
 
 
-@flow(name="data_preparation_flow")
-def data_preparation_pipeline():
-    filepath = "data/raw/Earthquakes-1990-2023.csv"
-    output_filepath = "data/processed/filtered_processed_features.csv"
+@task
+def save_processed_data(data, output_path):
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    data.to_csv(output_path, index=False)
+    print(f"Processed data saved to {output_path}")
 
-    data = load_data(filepath)
+
+@flow(name="data_preparation_flow")
+def data_preparation_pipeline(input_filepath, output_filepath):
+    data = load_data(input_filepath)
     data = filter_data(data, "data_type", "earthquake")
     data = filter_data(data, "status", "reviewed")
     data = drop_columns(data, ["tsunami", "significance", "status", "data_type"])
@@ -128,8 +127,10 @@ def data_preparation_pipeline():
     data = create_rolling_features(data)
     data = create_interaction_features(data)
     data = drop_columns(data, ["date", "time"])
-    save_data(data, output_filepath)
+    save_processed_data(data, output_filepath)
 
 
 if __name__ == "__main__":
-    data_preparation_pipeline()
+    input_filepath = "data/raw/Eartquakes-1990-2023.csv"
+    output_filepath = "data/processed/earthquake_data.csv"
+    data_preparation_pipeline(input_filepath, output_filepath)

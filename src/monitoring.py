@@ -19,7 +19,10 @@ def load_current_data(filepath):
 @task
 def generate_evidently_report(reference_data, current_data, output_path):
     column_mapping = ColumnMapping()
-    column_mapping.target = "magnitudo"
+    column_mapping.target = "mag"  # Assuming 'mag' is your target column
+    column_mapping.prediction = (
+        "mag"  # For this test, we'll use the same column as both target and prediction
+    )
     column_mapping.numerical_features = ["latitude", "longitude", "depth"]
 
     dashboard = Dashboard(tabs=[DataDriftTab(), RegressionPerformanceTab()])
