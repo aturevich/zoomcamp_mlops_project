@@ -7,6 +7,8 @@ from sklearn.metrics import mean_squared_error, r2_score
 import joblib
 import mlflow
 import mlflow.sklearn
+import os
+
 
 def load_data(filepath):
     print(f"Loading data from {filepath}...")
@@ -14,12 +16,14 @@ def load_data(filepath):
     print(f"Data loaded. Shape: {data.shape}")
     return data
 
+
 def train_model(X_train, y_train, params):
     print("Training Random Forest model...")
     model = RandomForestRegressor(**params)
     model.fit(X_train, y_train)
     print("Model training completed.")
     return model
+
 
 def evaluate_model(model, X_test, y_test):
     print("Evaluating model performance...")
@@ -31,24 +35,27 @@ def evaluate_model(model, X_test, y_test):
     print(f"R-squared Score: {r2}")
     return rmse, r2
 
+
 def save_model(model, filepath):
     print(f"Saving model to {filepath}...")
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
     joblib.dump(model, filepath)
     print("Model saved.")
 
-def main():
+
+def model_training_pipeline(input_data_path, model_output_path):
     # Set the experiment name
     mlflow.set_experiment("Earthquake Magnitude Prediction")
 
     # Load the training and test data
-    train_data = load_data('data/processed/train_data.csv')
-    test_data = load_data('data/processed/test_data.csv')
+    train_data = load_data(os.path.join(input_data_path, "train_data.csv"))
+    test_data = load_data(os.path.join(input_data_path, "test_data.csv"))
 
     # Separate features and target
-    X_train = train_data.drop(columns=['magnitudo'])
-    y_train = train_data['magnitudo']
-    X_test = test_data.drop(columns=['magnitudo'])
-    y_test = test_data['magnitudo']
+    X_train = train_data.drop(columns=["magnitudo"])
+    y_train = train_data["magnitudo"]
+    X_test = test_data.drop(columns=["magnitudo"])
+    y_test = test_data["magnitudo"]
 
     # Define model parameters
     params = {
@@ -56,7 +63,7 @@ def main():
         "max_depth": 10,
         "min_samples_split": 2,
         "min_samples_leaf": 1,
-        "random_state": 42
+        "random_state": 42,
     }
 
     # Start an MLflow run
@@ -78,15 +85,19 @@ def main():
         mlflow.sklearn.log_model(model, "random_forest_model")
 
         # Log feature importance
-        feature_importance = pd.DataFrame({
-            'feature': X_train.columns,
-            'importance': model.feature_importances_
-        }).sort_values('importance', ascending=False)
-        
+        feature_importance = pd.DataFrame(
+            {"feature": X_train.columns, "importance": model.feature_importances_}
+        ).sort_values("importance", ascending=False)
+
         mlflow.log_table(feature_importance, "feature_importance.json")
 
         # Save the model locally
-        save_model(model, 'models/random_forest_model.joblib')
+        save_model(model, model_output_path)
+
+    return model_output_path
+
 
 if __name__ == "__main__":
-    main()
+    input_data_path = "data/processed"
+    model_output_path = "models/random_forest_model.joblib"
+    model_training_pipeline(input_data_path, model_output_path)

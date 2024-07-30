@@ -7,13 +7,16 @@ import numpy as np
 app = FastAPI()
 
 # Load the model
-model = joblib.load('models/random_forest_model.joblib')
+model = joblib.load("models/random_forest_model.joblib")
+
 
 class PredictionInput(BaseModel):
     features: list[float]
 
+
 class PredictionOutput(BaseModel):
     prediction: float
+
 
 @app.post("/predict", response_model=PredictionOutput)
 async def predict(input: PredictionInput):
@@ -23,6 +26,7 @@ async def predict(input: PredictionInput):
         return PredictionOutput(prediction=prediction)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.get("/health")
 async def health_check():
