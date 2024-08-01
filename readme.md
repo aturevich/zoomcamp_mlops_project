@@ -1,9 +1,53 @@
+# Earthquake Prediction System
+
+This project aims to predict earthquake magnitudes using machine learning techniques, implemented with MLOps best practices.
+
 ## Setup and Installation
 
 1. Prerequisites: Python 3.10+, pipenv, Terraform
 2. Clone the repository: `git clone <repository-url>`
 3. Navigate to project directory: `cd earthquake_prediction`
 4. Install dependencies: `make setup`
+
+## Project Structure
+
+- `data/`: Contains raw and processed data
+- `src/`: Source code for data processing, model training, and API
+- `models/`: Saved model artifacts
+- `tests/`: Unit and integration tests
+- `terraform/`: Infrastructure as Code configurations
+
+## Data Processing and Model Training
+
+1. Data Profiling:
+```ydata_profiling --title "Earthquake Data Profiling Report" data/raw/Earthquakes-1990-2023.csv earthquake_data_profile.html```
+
+2. Start Prefect server:
+```prefect server start```
+
+3. In a new terminal, start Prefect agent:
+```prefect agent start -q "default"```
+
+4. Run the main pipeline:
+```pipenv shell```
+```prefect agent start -q "default```
+
+5. Execute the Prefect deployment:
+```prefect deployment run earthquake_data_pipeline/daily-schedule```
+
+6. View MLflow experiments:
+```mlflow ui```
+
+Access the MLflow UI at `http://localhost:5000`
+
+## Model Deployment
+
+Use Docker to build and run the prediction service:
+
+```docker-compose up --build```
+
+- FastAPI service: `http://localhost:8000`
+- Streamlit UI: `http://localhost:8501`
 
 ## Usage
 
@@ -32,11 +76,6 @@ TODO: GCP Setup
 - [ ] Create service account and download key
 - [ ] Configure Terraform with service account
 
-## Docker
-
-Build image: `docker build -t earthquake-prediction .`
-Run container: `docker run -p 8000:8000 earthquake-prediction`
-
 ## Contributing
 
 See CONTRIBUTING.md for details on submitting pull requests.
@@ -45,19 +84,6 @@ See CONTRIBUTING.md for details on submitting pull requests.
 
 This project is under the MIT License. See LICENSE.md for details.
 
-----
-using earthquake data, training 2 models
-# Data
-https://www.kaggle.com/datasets/alessandrolobello/the-ultimate-earthquake-dataset-from-1990-2023
+## Data Source
 
-
-ydata_profiling --title "Earthquake Data Profiling Report" data/raw/Eartquakes-1990-2023.csv earthquake_data_profile.html
-
-
-prefect server start
-
-prefect agent start -q "default"
-
-python pipeline.py
-
-prefect deployment run earthquake_data_pipeline/daily-schedule
+Earthquake data from [Kaggle](https://www.kaggle.com/datasets/alessandrolobello/the-ultimate-earthquake-dataset-from-1990-2023)

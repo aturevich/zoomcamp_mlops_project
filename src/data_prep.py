@@ -1,8 +1,6 @@
 import os
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
-from sklearn.cluster import KMeans
 from prefect import task, flow
 
 
@@ -31,14 +29,6 @@ def drop_columns(data, columns_to_drop):
 
 
 @task
-def encode_column(data, column):
-    """Encode a specified column to integers."""
-    label_encoder = LabelEncoder()
-    data[column] = label_encoder.fit_transform(data[column])
-    return data
-
-
-@task
 def remove_duplicates(data):
     data = data.drop_duplicates()
     return data
@@ -49,61 +39,8 @@ def create_datetime_features(data):
     data["datetime"] = pd.to_datetime(data["date"], format="ISO8601")
     data["year"] = data["datetime"].dt.year
     data["month"] = data["datetime"].dt.month
-    data["day"] = data["datetime"].dt.day
-    data["hour"] = data["datetime"].dt.hour
-    data["day_of_week"] = data["datetime"].dt.dayofweek
-    data["month_sin"] = np.sin(2 * np.pi * data["month"] / 12)
-    data["month_cos"] = np.cos(2 * np.pi * data["month"] / 12)
-    data["hour_sin"] = np.sin(2 * np.pi * data["hour"] / 24)
-    data["hour_cos"] = np.cos(2 * np.pi * data["hour"] / 24)
-    return data
-
-
-@task
-def create_spatial_features(data):
-    kmeans = KMeans(n_clusters=10, random_state=42)
-    data["location_cluster"] = kmeans.fit_predict(data[["latitude", "longitude"]])
-    return data
-
-
-@task
-def create_rolling_features(data):
-    data = data.sort_values("datetime")
-    for cluster in data["location_cluster"].unique():
-        cluster_mask = data["location_cluster"] == cluster
-        cluster_data = data[cluster_mask]
-        window_7d = 7 * 24
-        window_30d = 30 * 24
-        data.loc[cluster_mask, "mag_rolling_mean_7d"] = (
-            cluster_data["magnitudo"]
-            .rolling(window=window_7d, min_periods=1)
-            .mean()
-            .values
-        )
-        data.loc[cluster_mask, "mag_rolling_mean_30d"] = (
-            cluster_data["magnitudo"]
-            .rolling(window=window_30d, min_periods=1)
-            .mean()
-            .values
-        )
-        data.loc[cluster_mask, "depth_rolling_mean_7d"] = (
-            cluster_data["depth"].rolling(window=window_7d, min_periods=1).mean().values
-        )
-        data.loc[cluster_mask, "depth_rolling_mean_30d"] = (
-            cluster_data["depth"]
-            .rolling(window=window_30d, min_periods=1)
-            .mean()
-            .values
-        )
-        time_diff = cluster_data["datetime"].diff().dt.total_seconds() / 3600
-        data.loc[cluster_mask, "time_since_last_eq"] = time_diff.values
-    return data
-
-
-@task
-def create_interaction_features(data):
-    data["lat_long_interaction"] = data["latitude"] * data["longitude"]
-    data["mag_depth_interaction"] = data["magnitudo"] * data["depth"]
+    data["day_of_year"] = data["datetime"].dt.dayofyear
+    data["week_of_year"] = data["datetime"].dt.isocalendar().week
     return data
 
 
@@ -117,16 +54,28 @@ def save_processed_data(data, output_path):
 @flow(name="data_preparation_flow")
 def data_preparation_pipeline(input_filepath, output_filepath):
     data = load_data(input_filepath)
+    
+    # Print column names to see what we're working with
+    print("Columns in the dataset:", data.columns.tolist())
+    
     data = filter_data(data, "data_type", "earthquake")
     data = filter_data(data, "status", "reviewed")
-    data = drop_columns(data, ["tsunami", "significance", "status", "data_type"])
-    data = encode_column(data, "state")
+    data = drop_columns(data, ["tsunami", "significance", "status", "data_type", "time"])
     data = create_datetime_features(data)
-    data = create_spatial_features(data)
     data = remove_duplicates(data)
-    data = create_rolling_features(data)
-    data = create_interaction_features(data)
-    data = drop_columns(data, ["date", "time"])
+    
+    # Adjust column names based on what's actually in your dataset
+    magnitude_column = "magnitudo" if "magnitudo" in data.columns else "mag" if "mag" in data.columns else None
+    if magnitude_column is None:
+        raise ValueError("No magnitude column found in the dataset.")
+    
+    # Keep only the necessary columns
+    columns_to_keep = ["datetime", "latitude", "longitude", "depth", magnitude_column, "year", "month", "day_of_year", "week_of_year"]
+    data = data[columns_to_keep]
+    
+    # Rename the magnitude column to 'mag' for consistency
+    data = data.rename(columns={magnitude_column: "mag"})
+    
     save_processed_data(data, output_filepath)
 
 

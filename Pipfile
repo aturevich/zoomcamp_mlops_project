@@ -10,7 +10,7 @@ matplotlib = "*"
 ydata-profiling = "*"
 scikit-learn = "*"
 mlflow = "*"
-prefect = {extras = ["server"], version = "*"}
+prefect = {extras = ["server"] }
 prefect-dask = "*"
 bokeh = "!=3.0.*,>=2.4.2"
 numpy = "*"
@@ -19,6 +19,12 @@ google-cloud-storage = "*"
 pyyaml = "*"
 evidently = "==0.2.8"
 xgboost = "*"
+fastapi = "*"
+uvicorn = "*"
+streamlit = "*"
+folium = "*"
+streamlit-folium = "*"
+prophet = "*"
 
 [dev-packages]
 pytest = "*"

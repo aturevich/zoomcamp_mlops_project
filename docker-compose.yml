@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  fastapi:
+    build: 
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    ports:
+      - "8501:8501"
+    depends_on:
+      - fastapi
+    command: streamlit run src/streamlit_app.py
+
+volumes:
+  models:
