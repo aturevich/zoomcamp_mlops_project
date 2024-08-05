@@ -11,6 +11,8 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+mlflow.set_tracking_uri("file:./mlruns")
+
 @task
 def load_data(filepath):
     logger.info(f"Loading data from {filepath}...")
@@ -28,6 +30,9 @@ def preprocess_data(data):
     data[date_column] = pd.to_datetime(data[date_column], format='mixed', utc=True)
     data = data.sort_values(date_column)
 
+    # Remove timezone information
+    data[date_column] = data[date_column].dt.tz_localize(None)
+
     logger.info("Preprocessing completed successfully.")
     return data
 
@@ -42,6 +47,11 @@ def train_prophet_model(data):
     logger.info("Training Prophet model...")
     model = Prophet()
     model.fit(data)
+
+    # Log model parameters
+    for param_name, param_value in model.params.items():
+        mlflow.log_param(param_name, param_value)
+
     return model
 
 @task
@@ -49,6 +59,11 @@ def evaluate_prophet_model(model, data):
     logger.info("Evaluating Prophet model...")
     df_cv = cross_validation(model, initial='730 days', period='180 days', horizon='365 days')
     df_p = performance_metrics(df_cv)
+    
+    # Log evaluation metrics
+    for metric_name in df_p.columns:
+        mlflow.log_metric(metric_name, df_p[metric_name].mean())
+    
     return df_p
 
 @task
@@ -74,31 +89,20 @@ def train_prophet_model_flow(input_data_path, model_output_path):
             
             model = train_prophet_model(prophet_data)
             
-            # Log model parameters
-            for param, value in model.params.items():
-                mlflow.log_param(str(param), str(value))
-            
-            # Evaluate model
+            # Evaluate model and log metrics
             df_p = evaluate_prophet_model(model, prophet_data)
             
             rmse = df_p['rmse'].mean()
             mae = df_p['mae'].mean()
-            
             logger.info(f"Prophet model - RMSE: {rmse}, MAE: {mae}")
-            
-            # Log metrics
-            mlflow.log_metric("rmse", rmse)
-            mlflow.log_metric("mae", mae)
             
             # Save the model locally
             save_model(model, model_output_path)
             
             # Log the model file
             mlflow.log_artifact(model_output_path, "prophet_model")
+            mlflow.pyfunc.log_model("prophet_model", python_model=model)
             
-            # Log the model using MLflow's built-in support for sklearn models
-            mlflow.sklearn.log_model(model, "prophet_model")
-
         except Exception as e:
             logger.error(f"An error occurred during Prophet model training: {e}")
             raise

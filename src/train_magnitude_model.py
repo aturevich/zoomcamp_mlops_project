@@ -14,6 +14,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+mlflow.set_tracking_uri("file:./mlruns")
 
 class MLflowCallback:
     def __init__(self, metric_period=1):

@@ -27,6 +27,8 @@ streamlit-folium = "*"
 prophet = "*"
 catboost = "*"
 geopy = "*"
+psutil = "*"
+pmdarima = "*"
 
 [dev-packages]
 pytest = "*"

@@ -14,6 +14,8 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+mlflow.set_tracking_uri("file:./mlruns")
+
 class MLflowCallback:
     def __init__(self, metric_period=1):
         self.metric_period = metric_period
@@ -73,44 +75,109 @@ def prepare_location_features(data):
 def train_model(X_train, y_train, X_val=None, y_val=None):
     logger.info("Training CatBoost model...")
 
-    # Convert training and validation data to Pool format
     train_pool = Pool(X_train, y_train)
     eval_pool = Pool(X_val, y_val) if X_val is not None and y_val is not None else None
 
-    # Log the type and shape of the data
     logger.info(f"Train data shape: {X_train.shape}, {y_train.shape}")
     if X_val is not None and y_val is not None:
         logger.info(f"Validation data shape: {X_val.shape}, {y_val.shape}")
     else:
         logger.info("No validation data provided.")
 
-    # Ensure any previous MLflow run is ended before starting a new one
-    if mlflow.active_run():
-        mlflow.end_run()
+    if not mlflow.active_run():
+        mlflow.start_run(run_name="location_model")
 
-    # Start a new MLflow run for the final model training process
-    with mlflow.start_run(nested=True):
-        model = CatBoostRegressor(
-            iterations=1000,
-            learning_rate=0.1,
-            depth=6,
-            loss_function='MultiRMSE',
-            verbose=100
-        )
+    model = CatBoostRegressor(
+        iterations=1000,
+        learning_rate=0.1,
+        depth=6,
+        loss_function='MultiRMSE',
+        verbose=100
+    )
 
-        # Train model with or without eval_set based on availability
-        if eval_pool is not None:
-            model.fit(train_pool, eval_set=eval_pool, use_best_model=True)
-        else:
-            model.fit(train_pool)
+    mlflow_callback = MLflowCallback(metric_period=1)
 
-        # Log final validation metrics if eval_pool is provided
-        if eval_pool is not None:
-            val_metrics = model.eval_metrics(eval_pool, metrics=['MultiRMSE'], ntree_end=model.best_iteration_)
-            mlflow.log_metric("final_val_MultiRMSE", val_metrics['MultiRMSE'][-1])
-            logger.info(f"Validation MultiRMSE: {val_metrics['MultiRMSE'][-1]}")
+    if eval_pool is not None:
+        model.fit(train_pool, eval_set=eval_pool, use_best_model=True, callbacks=[mlflow_callback])
+    else:
+        model.fit(train_pool, callbacks=[mlflow_callback])
+
+    if eval_pool is not None:
+        val_metrics = model.eval_metrics(eval_pool, metrics=['MultiRMSE'], ntree_end=model.best_iteration_)
+        mlflow.log_metric("final_val_MultiRMSE", val_metrics['MultiRMSE'][-1])
+        logger.info(f"Validation MultiRMSE: {val_metrics['MultiRMSE'][-1]}")
 
     return model
+
+@flow
+def train_location_model(input_data_path, model_output_path, sample_size=None):
+    logger.info("Starting location model training flow...")
+    mlflow.set_experiment("Earthquake Location Prediction")
+    
+    with mlflow.start_run(run_name="location_model_parent") as parent_run:  # Start the parent run
+        logger.info(f"MLflow Parent Run ID: {parent_run.info.run_id}")
+        
+        try:
+            data = load_data(input_data_path, sample_size)
+            data = preprocess_data(data)
+            X, y_location = prepare_location_features(data)
+            
+            mlflow.log_param("input_rows", X.shape[0])
+            mlflow.log_param("input_columns", X.shape[1])
+            mlflow.log_param("features", ", ".join(X.columns))
+            
+            # Split data into training and validation sets
+            X_train, X_val, y_train, y_val = train_test_split(X, y_location, test_size=0.2, random_state=42)
+            
+            tscv = TimeSeriesSplit(n_splits=5)
+
+            logger.info("Training and evaluating location model...")
+            cv_metrics = cross_validate_model(X, y_location, tscv)
+
+            # Log average metrics
+            for metric, values in cv_metrics.items():
+                avg_value = np.mean(values)
+                std_value = np.std(values)
+                mlflow.log_metric(f"{metric}_avg", avg_value)
+                mlflow.log_metric(f"{metric}_std", std_value)
+                logger.info(f"{metric}: {avg_value:.4f} (+/- {std_value:.4f})")
+
+            # Train final model on all data
+            final_model = train_model(X_train, y_train, X_val, y_val)
+
+            # Evaluate final model
+            final_metrics = evaluate_model(final_model, X_val, y_val)
+            for metric, value in final_metrics.items():
+                mlflow.log_metric(f"final_{metric}", value)
+                logger.info(f"Final model {metric}: {value:.4f}")
+
+            # Log feature importances
+            feature_importance = pd.DataFrame({
+                'feature': X.columns,
+                'importance': final_model.feature_importances_
+            }).sort_values('importance', ascending=False)
+            
+            feature_importance.to_json("feature_importances.json")
+            mlflow.log_artifact("feature_importances.json")
+            logger.info(f"Top 5 important features: {', '.join(feature_importance['feature'].head().tolist())}")
+
+            # Log the model
+            mlflow.catboost.log_model(final_model, "location_model")
+
+            # Save the model locally
+            save_model(final_model, model_output_path)
+
+            model_uri = mlflow.get_artifact_uri("location_model")
+            logger.info(f"Logged model URI: {model_uri}")
+            mlflow.log_param("model_output_path", model_output_path)  # Log model path as a parameter
+
+        except Exception as e:
+            logger.error(f"An error occurred during location model training: {e}")
+            mlflow.log_param("error", str(e))
+            raise
+
+    logger.info("Location model training completed.")
+    return model_output_path
 
 @task
 def evaluate_model(model, X_test, y_test):
@@ -164,11 +231,8 @@ def cross_validate_model(X, y, tscv):
         X_train, X_test = X.iloc[train_index], X.iloc[test_index]
         y_train, y_test = y.iloc[train_index], y.iloc[test_index]
 
+        # Start a nested run
         with mlflow.start_run(nested=True, run_name=f"cv_fold_{fold}"):
-            # End any active MLflow run before starting a new one in the nested context
-            if mlflow.active_run():
-                mlflow.end_run()
-
             model = train_model(X_train, y_train, X_test, y_test)
             fold_metrics = evaluate_model(model, X_test, y_test)
         
@@ -255,7 +319,7 @@ if __name__ == "__main__":
     mlflow.set_tracking_uri("file:./mlruns")
     input_data_path = "data/processed/earthquake_data.csv"
     model_output_path = "models/location_prediction_model.cbm"
-    
+
     try:
         train_location_model(input_data_path, model_output_path, sample_size=100000)  # Adjust sample size as needed
     except Exception as e:
@@ -263,5 +327,5 @@ if __name__ == "__main__":
     finally:
         if mlflow.active_run():
             mlflow.end_run()
-    
+
     logger.info("Script execution completed")
