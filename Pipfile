@@ -29,6 +29,7 @@ catboost = "*"
 geopy = "*"
 psutil = "*"
 pmdarima = "*"
+plotly = "*"
 
 [dev-packages]
 pytest = "*"

@@ -1,103 +1,93 @@
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
-from datetime import date
-import joblib
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 import pandas as pd
-from typing import List
-from fastapi.middleware.cors import CORSMiddleware
+from catboost import CatBoostRegressor, CatBoostClassifier
+import logging
+import os
+from .monitoring import log_prediction, check_data_drift, generate_data_drift_report, init_db
+from src.ref_data import load_reference_data
 
-app = FastAPI(title="Earthquake Prediction API", version="1.0.0")
+# Initialize the database
+init_db()
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
-)
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI()
 
 # Load the models
-magnitude_model = joblib.load("models/magnitude_prediction_model.joblib")
-location_model = joblib.load("models/location_prediction_model.joblib")
+MODELS_DIR = "models"
+magnitude_model = CatBoostRegressor()
+magnitude_model.load_model(os.path.join(MODELS_DIR, "magnitude_model.cbm"))
+depth_model = CatBoostRegressor()
+depth_model.load_model(os.path.join(MODELS_DIR, "depth_model.cbm"))
+significant_model = CatBoostClassifier()
+significant_model.load_model(os.path.join(MODELS_DIR, "significant_model.cbm"))
 
-class MagnitudePredictionInput(BaseModel):
-    latitude: float
-    longitude: float
-    date: date
+# Load reference data
+reference_data = load_reference_data()
 
-class MagnitudePredictionOutput(BaseModel):
+class EarthquakePredictionInput(BaseModel):
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
+    date: str
+
+class EarthquakePredictionOutput(BaseModel):
     predicted_magnitude: float
+    predicted_depth: float
+    significant_probability: float
 
-class LocationPredictionInput(BaseModel):
-    date: date
-
-class PredictedLocation(BaseModel):
-    latitude: float
-    longitude: float
-    probability: float
-
-class LocationPredictionOutput(BaseModel):
-    predicted_locations: List[PredictedLocation]
-
-def preprocess_input(input_data: dict):
-    df = pd.DataFrame([input_data])
-    df['date'] = pd.to_datetime(df['date'])
-    df['day_of_year'] = df['date'].dt.dayofyear
-    df['month'] = df['date'].dt.month
-    df['year'] = df['date'].dt.year
-    df['week_of_year'] = df['date'].dt.isocalendar().week
-    
-    features = ['latitude', 'longitude', 'day_of_year', 'month', 'year', 'week_of_year']
-    return df[features]
-
-@app.post("/predict_magnitude", response_model=MagnitudePredictionOutput)
-async def predict_magnitude(input: MagnitudePredictionInput):
+@app.post("/predict_earthquake", response_model=EarthquakePredictionOutput)
+async def predict_earthquake(input: EarthquakePredictionInput):
     try:
-        input_dict = input.dict()
-        input_dict['date'] = input_dict['date'].isoformat()  # Convert date to string
-        input_df = preprocess_input(input_dict)
-        prediction = magnitude_model.predict(input_df)[0]
-        return MagnitudePredictionOutput(predicted_magnitude=prediction)
+        # Prepare input data
+        input_df = pd.DataFrame([input.dict()])
+        input_df['date'] = pd.to_datetime(input_df['date'])
+        
+        # Add time-based features
+        input_df['day_of_year'] = input_df['date'].dt.dayofyear
+        input_df['month'] = input_df['date'].dt.month
+        input_df['year'] = input_df['date'].dt.year
+        input_df['week_of_year'] = input_df['date'].dt.isocalendar().week
+        
+        # Select only the features used by the model
+        features = ["latitude", "longitude", "day_of_year", "month", "year", "week_of_year"]
+        input_df = input_df[features]
+        
+        # Make predictions
+        magnitude_prediction = magnitude_model.predict(input_df)[0]
+        depth_prediction = depth_model.predict(input_df)[0]
+        significant_probability = significant_model.predict_proba(input_df)[0][1]  # Probability of class 1 (significant event)
+        
+        # Log prediction
+        log_prediction(input.latitude, input.longitude, depth_prediction, magnitude_prediction, significant_probability)
+        
+        # Check for data drift
+        drift_score, drift_detected = check_data_drift(reference_data, input_df)
+        if drift_score is not None and drift_detected is not None:
+            logger.info(f"Data drift check results - Score: {drift_score}, Detected: {drift_detected}")
+            if drift_detected:
+                logger.warning(f"Data drift detected! Score: {drift_score}")
+                generate_data_drift_report(reference_data, input_df, "reports/data_drift_report.html")
+        else:
+            logger.warning("Data drift check failed or returned no results. Check the logs for more information.")
+        
+        return EarthquakePredictionOutput(
+            predicted_magnitude=float(magnitude_prediction),
+            predicted_depth=float(depth_prediction),
+            significant_probability=float(significant_probability)
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/predict_locations", response_model=LocationPredictionOutput)
-async def predict_locations(input: LocationPredictionInput):
-    try:
-        input_dict = input.dict()
-        input_dict['date'] = input_dict['date'].isoformat()  # Convert date to string
-        input_df = preprocess_input(input_dict)
-        predictions = location_model.predict(input_df)
-        predicted_locations = [
-            PredictedLocation(latitude=lat, longitude=lon, probability=prob)
-            for lat, lon, prob in predictions
-        ]
-        return LocationPredictionOutput(predicted_locations=predicted_locations)
-    except Exception as e:
+        logger.exception("An error occurred during earthquake prediction")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    return """
-    <html>
-        <head>
-            <title>Earthquake Prediction API</title>
-        </head>
-        <body>
-            <h1>Welcome to the Earthquake Prediction API</h1>
-            <p>Available endpoints:</p>
-            <ul>
-                <li><a href="/docs">/docs</a> - Interactive API documentation</li>
-                <li><a href="/predict_magnitude">/predict_magnitude</a> - Predict earthquake magnitude</li>
-                <li><a href="/predict_locations">/predict_locations</a> - Predict potential earthquake locations</li>
-                <li><a href="/health">/health</a> - API health check</li>
-            </ul>
-        </body>
-    </html>
-    """
+# Initialize the database when the app starts
+@app.on_event("startup")
+async def startup_event():
+    init_db()
+    logger.info("Database initialized")
