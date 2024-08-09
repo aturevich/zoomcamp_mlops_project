@@ -30,6 +30,7 @@ geopy = "*"
 psutil = "*"
 pmdarima = "*"
 plotly = "*"
+jinja2 = "*"
 
 [dev-packages]
 pytest = "*"

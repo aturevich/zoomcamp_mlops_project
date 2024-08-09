@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Evidently Dashboard</title>
+</head>
+<body>
+    <h1>Evidently Dashboard</h1>
+    <nav>
+        <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/static/index.html">Static Dashboard</a></li>
+        </ul>
+    </nav>
+    <div id="evidently-dashboard">
+        {{ dashboard_html | safe }}
+    </div>
+</body>
+</html>
