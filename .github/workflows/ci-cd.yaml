@@ -58,7 +58,15 @@ jobs:
     needs: [code-quality, test]
     strategy:
       matrix:
-        dockerfile: [Dockerfile.api, Dockerfile.streamlit, Dockerfile.mlflow, Dockerfile.prefect]
+        include:
+          - dockerfile: Dockerfile.api
+            image_name: earthquake-prediction-api
+          - dockerfile: Dockerfile.streamlit
+            image_name: earthquake-prediction-streamlit
+          - dockerfile: Dockerfile.mlflow
+            image_name: earthquake-prediction-mlflow
+          - dockerfile: Dockerfile.prefect
+            image_name: earthquake-prediction-prefect
     steps:
     - uses: actions/checkout@v2
     - name: Set up Docker Buildx
@@ -69,13 +77,13 @@ jobs:
         context: .
         file: ./${{ matrix.dockerfile }}
         push: false
-        tags: earthquake-prediction-${{ matrix.dockerfile }}:latest
-        outputs: type=docker,dest=/tmp/${{ matrix.dockerfile }}.tar
+        tags: ${{ matrix.image_name }}:latest
+        outputs: type=docker,dest=/tmp/${{ matrix.image_name }}.tar
     - name: Upload artifact
       uses: actions/upload-artifact@v2
       with:
-        name: docker-image-${{ matrix.dockerfile }}
-        path: /tmp/${{ matrix.dockerfile }}.tar
+        name: docker-image-${{ matrix.image_name }}
+        path: /tmp/${{ matrix.image_name }}.tar
 
   format:
     runs-on: ubuntu-latest
