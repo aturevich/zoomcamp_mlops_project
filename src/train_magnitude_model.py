@@ -59,9 +59,7 @@ def preprocess_data(data):
     date_column = (
         "date"
         if "date" in data.columns
-        else "datetime"
-        if "datetime" in data.columns
-        else None
+        else "datetime" if "datetime" in data.columns else None
     )
     if date_column is None:
         raise ValueError("No date or datetime column found in the dataset.")
