@@ -1,5 +1,17 @@
-FROM earthquake_prediction_base:latest
+FROM python:3.10-slim
 
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Prefect
+RUN pip install prefect
+
+# Expose the port Prefect runs on
 EXPOSE 4200
 
+# Run the Prefect server
 CMD ["prefect", "server", "start"]

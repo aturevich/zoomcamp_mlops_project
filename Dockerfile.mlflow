@@ -1,5 +1,17 @@
-FROM earthquake_prediction_base:latest
+FROM python:3.10-slim
 
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install MLflow
+RUN pip install mlflow
+
+# Expose the port MLflow runs on
 EXPOSE 5000
 
+# Run the MLflow server
 CMD ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000"]

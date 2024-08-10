@@ -1,9 +1,22 @@
-FROM earthquake_prediction_base:latest
+FROM python:3.10-slim
 
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY Pipfile Pipfile.lock ./
+RUN pip install pipenv && pipenv install --system --deploy
+
+# Copy source code
 COPY src /app/src
-COPY models /app/models
-COPY static /app/static
+COPY config.yaml /app/config.yaml
 
-EXPOSE 8000
+# Set environment variables
+ENV PYTHONPATH=/app
 
+# Run the FastAPI server
 CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
