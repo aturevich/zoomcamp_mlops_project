@@ -74,11 +74,11 @@ def main():
     )
     st.write(
         """
-    This earthquake prediction model uses machine learning algorithms trained on historical earthquake data. 
-    It takes into account factors such as geographical location and time to predict the magnitude and depth of potential earthquakes, 
+    This earthquake prediction model uses machine learning algorithms trained on historical earthquake data.
+    It takes into account factors such as geographical location and time to predict the magnitude and depth of potential earthquakes,
     as well as the probability of a significant seismic event.
 
-    Please note that earthquake prediction is a complex field with inherent uncertainties. 
+    Please note that earthquake prediction is a complex field with inherent uncertainties.
     This model provides estimates based on patterns in historical data, but cannot guarantee the occurrence or non-occurrence of seismic events.
     """
     )

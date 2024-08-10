@@ -26,7 +26,7 @@ def init_db():
     c = conn.cursor()
     c.execute(
         """CREATE TABLE IF NOT EXISTS predictions
-                 (timestamp TEXT, latitude REAL, longitude REAL, depth REAL, 
+                 (timestamp TEXT, latitude REAL, longitude REAL, depth REAL,
                   magnitude REAL, significant_probability REAL)"""
     )
     c.execute(

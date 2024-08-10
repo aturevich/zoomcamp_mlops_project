@@ -1,5 +1,4 @@
 import pandas as pd
-import os
 from src.ds_profiling import load_data, generate_report
 
 

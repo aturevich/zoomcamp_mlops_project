@@ -1,20 +1,15 @@
 import os
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import TimeSeriesSplit, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     mean_squared_error,
     r2_score,
-    mean_absolute_error,
-    accuracy_score,
-    precision_score,
-    f1_score,
-    recall_score,
+    mean_absolute_error
 )
 from catboost import CatBoostRegressor, CatBoostClassifier, Pool
 import mlflow
 import mlflow.catboost
-from mlflow.models import infer_signature
 from prefect import task, flow
 
 import logging

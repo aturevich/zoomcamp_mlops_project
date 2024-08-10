@@ -1,6 +1,5 @@
 import pandas as pd
-from src.monitoring import generate_data_drift_report, check_data_drift
-from src.monitoring import check_data_drift, DB_FILE
+from src.monitoring import generate_data_drift_report, check_data_drift, DB_FILE
 import os
 import sqlite3
 
