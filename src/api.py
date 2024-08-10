@@ -19,7 +19,7 @@ from .monitoring import (
     generate_data_drift_report,
     init_db,
     get_recent_predictions,
-    get_data_drift_results
+    get_data_drift_results,
 )
 from .generate_inferred_data_api import generate_inferred_predictions
 
@@ -41,9 +41,15 @@ templates = Jinja2Templates(directory="templates")
 
 # Load models
 MODELS_DIR = "models"
-magnitude_model = CatBoostRegressor().load_model(os.path.join(MODELS_DIR, "magnitude_model.cbm"))
-depth_model = CatBoostRegressor().load_model(os.path.join(MODELS_DIR, "depth_model.cbm"))
-significant_model = CatBoostClassifier().load_model(os.path.join(MODELS_DIR, "significant_model.cbm"))
+magnitude_model = CatBoostRegressor().load_model(
+    os.path.join(MODELS_DIR, "magnitude_model.cbm")
+)
+depth_model = CatBoostRegressor().load_model(
+    os.path.join(MODELS_DIR, "depth_model.cbm")
+)
+significant_model = CatBoostClassifier().load_model(
+    os.path.join(MODELS_DIR, "significant_model.cbm")
+)
 
 
 # Pydantic models
@@ -80,13 +86,19 @@ async def startup_event():
         reference_data = reference_data[common_columns]
 
         column_mapping = ColumnMapping()
-        column_mapping.numerical_features = current_data.select_dtypes(include=['int64', 'float64']).columns.tolist()
+        column_mapping.numerical_features = current_data.select_dtypes(
+            include=["int64", "float64"]
+        ).columns.tolist()
 
         evidently_dashboard = Dashboard(tabs=[DataDriftTab()])
-        evidently_dashboard.calculate(reference_data, current_data, column_mapping=column_mapping)
+        evidently_dashboard.calculate(
+            reference_data, current_data, column_mapping=column_mapping
+        )
         logger.info("Evidently dashboard created successfully")
     else:
-        logger.warning(f"Not enough data to generate Evidently AI dashboard. We need at least 200 predictions, but we only have {len(recent_predictions)}.")
+        logger.warning(
+            f"Not enough data to generate Evidently AI dashboard. We need at least 200 predictions, but we only have {len(recent_predictions)}."
+        )
         evidently_dashboard = None
 
 
@@ -98,18 +110,19 @@ async def root(request: Request):
     else:
         dashboard_html = "<p>Evidently dashboard is not available. There might not be enough data.</p>"
 
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "dashboard_html": dashboard_html
-    })
+    return templates.TemplateResponse(
+        "index.html", {"request": request, "dashboard_html": dashboard_html}
+    )
 
 
 @app.get("/monitoring/recent_predictions")
 async def recent_predictions():
     conn = sqlite3.connect(DB_FILE)
-    df = pd.read_sql_query("SELECT * FROM predictions ORDER BY timestamp DESC LIMIT 10", conn)
+    df = pd.read_sql_query(
+        "SELECT * FROM predictions ORDER BY timestamp DESC LIMIT 10", conn
+    )
     conn.close()
-    predictions = df.to_dict(orient='records')
+    predictions = df.to_dict(orient="records")
     logger.info(f"Fetched {len(predictions)} recent predictions")
     logger.debug(f"Recent predictions data: {predictions}")
     return predictions
@@ -118,9 +131,11 @@ async def recent_predictions():
 @app.get("/raw-predictions")
 async def raw_predictions():
     conn = sqlite3.connect(DB_FILE)
-    df = pd.read_sql_query("SELECT * FROM predictions ORDER BY timestamp DESC LIMIT 10", conn)
+    df = pd.read_sql_query(
+        "SELECT * FROM predictions ORDER BY timestamp DESC LIMIT 10", conn
+    )
     conn.close()
-    return df.to_dict(orient='records')
+    return df.to_dict(orient="records")
 
 
 @app.get("/monitoring/drift_results")
@@ -131,7 +146,9 @@ async def drift_results():
 @app.get("/prediction-count")
 async def prediction_count():
     conn = sqlite3.connect(DB_FILE)
-    count = pd.read_sql_query("SELECT COUNT(*) as count FROM predictions", conn).iloc[0]['count']
+    count = pd.read_sql_query("SELECT COUNT(*) as count FROM predictions", conn).iloc[
+        0
+    ]["count"]
     conn.close()
     return {"count": int(count)}
 
@@ -140,30 +157,51 @@ async def prediction_count():
 async def predict_earthquake(input: EarthquakePredictionInput):
     try:
         input_df = pd.DataFrame([input.dict()])
-        input_df['date'] = pd.to_datetime(input_df['date'])
-        input_df['day_of_year'] = input_df['date'].dt.dayofyear
-        input_df['month'] = input_df['date'].dt.month
-        input_df['year'] = input_df['date'].dt.year
-        input_df['week_of_year'] = input_df['date'].dt.isocalendar().week
-        features = ["latitude", "longitude", "day_of_year", "month", "year", "week_of_year"]
+        input_df["date"] = pd.to_datetime(input_df["date"])
+        input_df["day_of_year"] = input_df["date"].dt.dayofyear
+        input_df["month"] = input_df["date"].dt.month
+        input_df["year"] = input_df["date"].dt.year
+        input_df["week_of_year"] = input_df["date"].dt.isocalendar().week
+        features = [
+            "latitude",
+            "longitude",
+            "day_of_year",
+            "month",
+            "year",
+            "week_of_year",
+        ]
         input_df = input_df[features]
         magnitude_prediction = magnitude_model.predict(input_df)[0]
         depth_prediction = depth_model.predict(input_df)[0]
         significant_probability = significant_model.predict_proba(input_df)[0][1]
-        log_prediction(input.latitude, input.longitude, depth_prediction, magnitude_prediction, significant_probability)
+        log_prediction(
+            input.latitude,
+            input.longitude,
+            depth_prediction,
+            magnitude_prediction,
+            significant_probability,
+        )
         recent_predictions = get_recent_predictions(n=1000)
-        drift_score, drift_detected = check_data_drift(recent_predictions.iloc[500:], recent_predictions.iloc[:500])
+        drift_score, drift_detected = check_data_drift(
+            recent_predictions.iloc[500:], recent_predictions.iloc[:500]
+        )
         if drift_score is not None and drift_detected is not None:
-            logger.info(f"Data drift check results - Score: {drift_score}, Detected: {drift_detected}")
+            logger.info(
+                f"Data drift check results - Score: {drift_score}, Detected: {drift_detected}"
+            )
             if drift_detected:
                 logger.warning(f"Data drift detected! Score: {drift_score}")
-                generate_data_drift_report(recent_predictions.iloc[500:], recent_predictions.iloc[:500], "reports/data_drift_report.html")
+                generate_data_drift_report(
+                    recent_predictions.iloc[500:],
+                    recent_predictions.iloc[:500],
+                    "reports/data_drift_report.html",
+                )
         else:
             logger.warning("Data drift check failed or returned no results.")
         return EarthquakePredictionOutput(
             predicted_magnitude=float(magnitude_prediction),
             predicted_depth=float(depth_prediction),
-            significant_probability=float(significant_probability)
+            significant_probability=float(significant_probability),
         )
     except Exception as e:
         logger.exception("An error occurred during earthquake prediction")

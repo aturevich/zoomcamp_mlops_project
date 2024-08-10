@@ -18,7 +18,7 @@
 <body>
     <div class="container">
         <h1>Earthquake Prediction Dashboard</h1>
-        
+
         <div>
             <h2>Recent Predictions</h2>
             <table id="recentPredictions">
@@ -32,7 +32,7 @@
                 </tbody>
             </table>
         </div>
-        
+
         <div>
             <h2>Evidently Dashboard</h2>
             {{ dashboard_html | safe }}
@@ -57,7 +57,7 @@
             console.log("Received data:", data);
             var tableBody = $('#recentPredictions tbody');
             tableBody.empty();  // Clear existing rows
-            
+
             if (data && data.length > 0) {
                 populateTableHeader(data);
                 data.forEach(function(prediction) {

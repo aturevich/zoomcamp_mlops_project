@@ -2,11 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    mean_squared_error,
-    r2_score,
-    mean_absolute_error
-)
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from catboost import CatBoostRegressor, CatBoostClassifier, Pool
 import mlflow
 import mlflow.catboost
@@ -63,7 +59,9 @@ def preprocess_data(data):
     date_column = (
         "date"
         if "date" in data.columns
-        else "datetime" if "datetime" in data.columns else None
+        else "datetime"
+        if "datetime" in data.columns
+        else None
     )
     if date_column is None:
         raise ValueError("No date or datetime column found in the dataset.")

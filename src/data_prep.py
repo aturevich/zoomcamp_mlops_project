@@ -69,7 +69,9 @@ def data_preparation_pipeline(input_filepath, output_filepath):
     magnitude_column = (
         "magnitudo"
         if "magnitudo" in data.columns
-        else "mag" if "mag" in data.columns else None
+        else "mag"
+        if "mag" in data.columns
+        else None
     )
     if magnitude_column is None:
         raise ValueError("No magnitude column found in the dataset.")

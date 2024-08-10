@@ -8,7 +8,7 @@ services:
     image: earthquake_prediction_base:latest
 
   api:
-      build: 
+      build:
         context: .
         dockerfile: Dockerfile.api
       ports:
