@@ -1,15 +1,46 @@
 version: '3.8'
 
 services:
-  fastapi:
-    build: 
+  base:
+    build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile.base
+    image: earthquake_prediction_base:latest
+
+  api:
+      build: 
+        context: .
+        dockerfile: Dockerfile.api
+      ports:
+        - "8000:8000"
+      volumes:
+        - ./models:/app/models
+        - ./static:/app/static  # Add this line
+      environment:
+        - STATIC_DIR=/app/static  # Add this line
+      depends_on:
+        - base
+        - mlflow
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
     ports:
-      - "8000:8000"
+      - "5000:5000"
     volumes:
-      - ./models:/app/models
-    command: uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
+      - ./mlruns:/app/mlruns
+    depends_on:
+      - base
+
+  prefect:
+    build:
+      context: .
+      dockerfile: Dockerfile.prefect
+    ports:
+      - "4200:4200"
+    depends_on:
+      - base
 
   streamlit:
     build:
@@ -18,8 +49,9 @@ services:
     ports:
       - "8501:8501"
     depends_on:
-      - fastapi
-    command: streamlit run src/streamlit_app.py
+      - base
+      - api
 
 volumes:
   models:
+  mlruns:

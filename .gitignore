@@ -3,3 +3,4 @@ mlruns/
 __pycache__/
 catboost_info/
 artifacts/
+.coverage

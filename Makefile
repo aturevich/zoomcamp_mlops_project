@@ -1,4 +1,4 @@
-.PHONY: setup run test lint format clean api profile train monitor check create-sample-data
+.PHONY: setup run test lint format clean api profile train monitor check create-sample-data pre-commit
 
 # Set up the project
 setup:
@@ -46,16 +46,8 @@ monitor:
 	pipenv run python -c "from src.monitoring import monitoring_flow; monitoring_flow('data/processed/reference_data.csv', 'data/processed/current_data.csv', 'reports/model_monitoring_report.html')"
 
 # All-in-one command to run lint, test, and format
-check: lint create-sample-data test format
+check: pre-commit lint create-sample-data test format
 
-# Terraform commands
-# tf-init:
-#	cd terraform && terraform init
-
-# tf-plan:
-#	cd terraform && terraform plan
-
-# tf-apply:
-#	cd terraform && terraform apply
-
-# tf-destroy:
+# Run pre-commit checks
+pre-commit:
+	pipenv run pre-commit run --all-files

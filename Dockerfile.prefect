@@ -1,7 +1,5 @@
-FROM python:3.10-slim
+FROM earthquake_prediction_base:latest
 
-WORKDIR /app
-
-RUN pip install prefect
+EXPOSE 4200
 
 CMD ["prefect", "server", "start"]

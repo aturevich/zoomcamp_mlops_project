@@ -1,134 +1,120 @@
 import pandas as pd
 import numpy as np
-from src.model_training import (
+import mlflow
+from src.train_magnitude_model import (
+    train_earthquake_model,
+    load_data,
     preprocess_data,
-    prepare_magnitude_features,
-    prepare_location_features,
+    prepare_features,
     train_model,
-    train_location_model,
     evaluate_model,
-    evaluate_location_model,
 )
+import os
+import tempfile
 
-def test_prepare_magnitude_features():
-    # Create a sample DataFrame with all required columns
-    data = pd.DataFrame({
-        'latitude': [1.0, 2.0, 3.0],
-        'longitude': [4.0, 5.0, 6.0],
-        'depth': [10.0, 20.0, 30.0],
-        'mag': [3.0, 4.0, 5.0],
-        'datetime': pd.date_range(start='2021-01-01', periods=3),
-        'day_of_year': [1, 2, 3],
-        'month': [1, 1, 1],
-        'year': [2021, 2021, 2021],
-        'week_of_year': [1, 1, 1],
-        'mag_lag_1': [np.nan, 3.0, 4.0],
-        'mag_lag_7': [np.nan, np.nan, np.nan],
-        'mag_lag_30': [np.nan, np.nan, np.nan],
-        'depth_lag_1': [np.nan, 10.0, 20.0],
-        'depth_lag_7': [np.nan, np.nan, np.nan],
-        'depth_lag_30': [np.nan, np.nan, np.nan],
-        'mag_rolling_mean_7d': [3.0, 3.5, 4.0],
-        'mag_rolling_mean_30d': [3.0, 3.5, 4.0],
-        'depth_rolling_mean_7d': [10.0, 15.0, 20.0],
-        'depth_rolling_mean_30d': [10.0, 15.0, 20.0],
-    })
-    
-    X, y = prepare_magnitude_features(data)
-    
-    assert isinstance(X, pd.DataFrame)
-    assert isinstance(y, pd.Series)
-    assert 'latitude' in X.columns
-    assert 'longitude' in X.columns
-    assert 'depth' in X.columns
-    assert 'day_of_year' in X.columns
-    assert 'month' in X.columns
-    assert 'year' in X.columns
-    assert 'week_of_year' in X.columns
-    assert 'mag_lag_1' in X.columns
-    assert 'mag_lag_7' in X.columns
-    assert 'mag_lag_30' in X.columns
-    assert 'depth_lag_1' in X.columns
-    assert 'depth_lag_7' in X.columns
-    assert 'depth_lag_30' in X.columns
-    assert 'mag_rolling_mean_7d' in X.columns
-    assert 'mag_rolling_mean_30d' in X.columns
-    assert 'depth_rolling_mean_7d' in X.columns
-    assert 'depth_rolling_mean_30d' in X.columns
-    assert y.name == 'mag'
 
-def test_prepare_location_features():
-    # Create a sample DataFrame
-    data = pd.DataFrame({
-        'latitude': [1.0, 2.0, 3.0],
-        'longitude': [4.0, 5.0, 6.0],
-        'datetime': pd.date_range(start='2021-01-01', periods=3),
-    })
+def test_load_data():
+    # Create a temporary CSV file
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as tmp:
+        tmp.write("date,latitude,longitude,depth,mag\n")
+        tmp.write("2021-01-01,35.0,-118.0,10.0,3.5\n")
+        tmp_path = tmp.name
 
+    data = load_data(tmp_path)
+    assert isinstance(data, pd.DataFrame)
+    assert len(data) > 0
+    os.unlink(tmp_path)
+
+
+def test_preprocess_data():
+    data = pd.DataFrame(
+        {
+            "date": ["2021-01-01"],
+            "latitude": [35.0],
+            "longitude": [-118.0],
+            "depth": [10.0],
+            "mag": [3.5],
+        }
+    )
+    processed_data = preprocess_data(data)
+    assert "day_of_year" in processed_data.columns
+    assert "month" in processed_data.columns
+    assert "year" in processed_data.columns
+
+
+def test_prepare_features():
+    data = pd.DataFrame(
+        {
+            "date": pd.date_range(start="2021-01-01", periods=5),
+            "latitude": [35.0] * 5,
+            "longitude": [-118.0] * 5,
+            "depth": [10.0] * 5,
+            "mag": [3.5] * 5,
+        }
+    )
     data = preprocess_data(data)
-    
-    X, y = prepare_location_features(data)
-    
+    X, y_magnitude, y_depth, y_significant = prepare_features(data)
     assert isinstance(X, pd.DataFrame)
-    assert isinstance(y, pd.DataFrame)
-    assert 'day_of_year' in X.columns
-    assert 'month' in X.columns
-    assert 'year' in X.columns
-    assert 'week_of_year' in X.columns
-    assert list(y.columns) == ['latitude', 'longitude']
-    assert X.shape[0] == 3  # Number of rows should match input
-    assert y.shape[0] == 3  # Number of rows should match input
-    assert X.shape[1] == 4  # Should have 4 feature columns
-    assert y.shape[1] == 2  # Should have latitude and longitude
+    assert isinstance(y_magnitude, pd.Series)
+    assert isinstance(y_depth, pd.Series)
+    assert isinstance(y_significant, pd.Series)
 
-def test_train_magnitude_model():
-    X = pd.DataFrame({
-        'feature1': [1, 2, 3],
-        'feature2': [4, 5, 6],
-    })
+
+def test_train_model():
+    X = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [4, 5, 6]})
     y = pd.Series([1.0, 2.0, 3.0])
-    
-    model = train_model(X, y, model_type='rf')
-    assert hasattr(model, 'predict')
-    
-    model = train_model(X, y, model_type='xgb')
-    assert hasattr(model, 'predict')
+    model = train_model(X, y, X, y, target="magnitude")
+    assert hasattr(model, "predict")
 
-def test_train_location_model():
-    X = pd.DataFrame({
-        'feature1': [1, 2, 3],
-        'feature2': [4, 5, 6],
-    })
-    y = pd.DataFrame({
-        'latitude': [1.0, 2.0, 3.0],
-        'longitude': [4.0, 5.0, 6.0],
-    })
-    
-    model = train_location_model(X, y)
-    assert hasattr(model, 'predict')
 
-def test_evaluate_magnitude_model():
-    X = pd.DataFrame({
-        'feature1': [1, 2, 3],
-        'feature2': [4, 5, 6],
-    })
+class DummyModel:
+    def predict(self, X):
+        return X["feature"]  # Just return the feature as the prediction
+
+
+def test_evaluate_model():
+    # Create a dummy model
+    dummy_model = DummyModel()
+
+    # Create dummy test data
+    X_test = pd.DataFrame({"feature": [1.0, 2.0, 3.0]})
     y_true = pd.Series([1.0, 2.0, 3.0])
-    y_pred = pd.Series([1.1, 2.1, 3.1])
-    
-    rmse, r2 = evaluate_model(y_true, y_pred)
-    assert isinstance(rmse, float)
-    assert isinstance(r2, float)
 
-def test_evaluate_location_model():
-    y_true = pd.DataFrame({
-        'latitude': [1.0, 2.0, 3.0],
-        'longitude': [4.0, 5.0, 6.0],
-    })
-    y_pred = pd.DataFrame({
-        'latitude': [1.1, 2.1, 3.1],
-        'longitude': [4.1, 5.1, 6.1],
-    })
-    
-    rmse, r2 = evaluate_location_model(y_true, y_pred)
-    assert isinstance(rmse, float)
-    assert isinstance(r2, float)
+    # Call evaluate_model with the correct parameters
+    metrics = evaluate_model(dummy_model, X_test, y_true, task="regression")
+
+    # Add assertions to check the returned metrics
+    assert "mse" in metrics
+    assert "rmse" in metrics
+    assert "mae" in metrics
+    assert "r2" in metrics
+
+    # You can add more specific checks if you want, e.g.:
+    assert metrics["mse"] >= 0
+    assert 0 <= metrics["r2"] <= 1
+
+
+def test_train_earthquake_model():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_data_path = os.path.join(tmpdir, "input.csv")
+        pd.DataFrame(
+            {
+                "date": pd.date_range(start="2021-01-01", periods=100),
+                "latitude": np.random.uniform(30, 40, 100),
+                "longitude": np.random.uniform(-120, -110, 100),
+                "depth": np.random.uniform(0, 100, 100),
+                "mag": np.random.uniform(2, 6, 100),
+            }
+        ).to_csv(input_data_path, index=False)
+
+        model_output_path = os.path.join(tmpdir, "models")
+
+        # Ensure any existing runs are ended before starting the test
+        mlflow.end_run()
+
+        try:
+            result = train_earthquake_model(input_data_path, model_output_path)
+            assert os.path.exists(result)
+        finally:
+            # Ensure runs are ended after the test
+            mlflow.end_run()

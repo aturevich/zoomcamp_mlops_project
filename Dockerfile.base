@@ -1,0 +1,18 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install pipenv
+RUN pip install pipenv
+
+# Copy Pipfile and Pipfile.lock
+COPY Pipfile Pipfile.lock ./
+
+# Install dependencies
+RUN pipenv install --system --deploy
+
+# Remove Pipenv
+RUN pip uninstall -y pipenv
+
+# Clean up
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*

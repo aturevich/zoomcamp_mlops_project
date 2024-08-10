@@ -54,28 +54,44 @@ def save_processed_data(data, output_path):
 @flow(name="data_preparation_flow")
 def data_preparation_pipeline(input_filepath, output_filepath):
     data = load_data(input_filepath)
-    
+
     # Print column names to see what we're working with
     print("Columns in the dataset:", data.columns.tolist())
-    
+
     data = filter_data(data, "data_type", "earthquake")
     data = filter_data(data, "status", "reviewed")
-    data = drop_columns(data, ["tsunami", "significance", "status", "data_type", "time"])
+    data = drop_columns(
+        data, ["tsunami", "significance", "status", "data_type", "time"]
+    )
     data = create_datetime_features(data)
     data = remove_duplicates(data)
-    
+
     # Adjust column names based on what's actually in your dataset
-    magnitude_column = "magnitudo" if "magnitudo" in data.columns else "mag" if "mag" in data.columns else None
+    magnitude_column = (
+        "magnitudo"
+        if "magnitudo" in data.columns
+        else "mag" if "mag" in data.columns else None
+    )
     if magnitude_column is None:
         raise ValueError("No magnitude column found in the dataset.")
-    
+
     # Keep only the necessary columns
-    columns_to_keep = ["datetime", "latitude", "longitude", "depth", magnitude_column, "year", "month", "day_of_year", "week_of_year"]
+    columns_to_keep = [
+        "datetime",
+        "latitude",
+        "longitude",
+        "depth",
+        magnitude_column,
+        "year",
+        "month",
+        "day_of_year",
+        "week_of_year",
+    ]
     data = data[columns_to_keep]
-    
+
     # Rename the magnitude column to 'mag' for consistency
     data = data.rename(columns={magnitude_column: "mag"})
-    
+
     save_processed_data(data, output_filepath)
 
 

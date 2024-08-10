@@ -1,15 +1,4 @@
-FROM python:3.10-slim
-
-WORKDIR /app
-
-# Install pipenv
-RUN pip install pipenv
-
-# Copy Pipfile and Pipfile.lock
-COPY Pipfile Pipfile.lock ./
-
-# Install dependencies
-RUN pipenv install --system --deploy
+FROM earthquake_prediction_base:latest
 
 COPY src /app/src
 

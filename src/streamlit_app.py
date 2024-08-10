@@ -1,105 +1,88 @@
 import streamlit as st
 import requests
-from datetime import date
-import folium
-from streamlit_folium import st_folium
+from datetime import datetime
 
-API_URL = "http://localhost:8000"  # Update this with your API URL
+st.set_page_config(page_title="Earthquake Prediction", layout="wide")
 
-st.title("Earthquake Prediction System")
 
-# Information about the dataset used
-st.sidebar.info("This prediction system uses USGS Earthquake Data from 1990-2023.")
+def main():
+    st.markdown(
+        "<h1 style='text-align: center;'>Earthquake Prediction</h1>",
+        unsafe_allow_html=True,
+    )
 
-# Initialize session state
-if 'latitude' not in st.session_state:
-    st.session_state.latitude = 39.8283
-if 'longitude' not in st.session_state:
-    st.session_state.longitude = -98.5795
+    # Input form
+    st.markdown(
+        "<h2 style='text-align: center;'>Enter Prediction Details</h2>",
+        unsafe_allow_html=True,
+    )
 
-# Function to create map
-def create_map():
-    m = folium.Map(location=[st.session_state.latitude, st.session_state.longitude], zoom_start=4)
-    folium.Marker(
-        [st.session_state.latitude, st.session_state.longitude],
-        popup="Selected Location",
-        tooltip="Selected Location"
-    ).add_to(m)
-    return m
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        latitude = st.number_input(
+            "Latitude", min_value=-90.0, max_value=90.0, value=0.0
+        )
+        longitude = st.number_input(
+            "Longitude", min_value=-180.0, max_value=180.0, value=0.0
+        )
+        date = st.date_input("Date")
+        time = st.time_input("Time")
 
-# Callback function for map clicks
-def map_click_callback(change):
-    st.session_state.latitude = change['lat']
-    st.session_state.longitude = change['lng']
+        if st.button("Predict"):
+            # Combine date and time
+            datetime_str = f"{date} {time}"
+            datetime_obj = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
 
-# Display the map and capture clicks
-st.write("Click on the map to select a location:")
-map_output = st_folium(create_map(), width=700, height=450, key="map")
+            # Prepare the data for the API request
+            data = {
+                "latitude": latitude,
+                "longitude": longitude,
+                "date": datetime_obj.isoformat(),
+            }
 
-# Update coordinates if a location was clicked
-if map_output['last_clicked']:
-    map_click_callback(map_output['last_clicked'])
-    st.rerun()  # Use st.rerun() instead of st.experimental_rerun()
+            # Make the API request
+            API_URL = "http://localhost:8000/predict_earthquake"  # Update this with your actual API URL
+            try:
+                response = requests.post(API_URL, json=data)
+                response.raise_for_status()
+                result = response.json()
 
-# Display selected coordinates
-st.header("Selected Location")
-st.write(f"Latitude: {st.session_state.latitude:.4f}")
-st.write(f"Longitude: {st.session_state.longitude:.4f}")
+                # Display the results
+                st.markdown(
+                    "<h2 style='text-align: center;'>Prediction Results</h2>",
+                    unsafe_allow_html=True,
+                )
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    st.metric(
+                        "Predicted Magnitude", f"{result['predicted_magnitude']:.2f}"
+                    )
+                    st.metric("Predicted Depth", f"{result['predicted_depth']:.2f} km")
+                    st.metric(
+                        "Probability of Significant Earthquake",
+                        f"{result['significant_probability']:.2%}",
+                    )
 
-# Date input
-prediction_date = st.date_input("Select date for prediction", value=date.today())
+            except requests.exceptions.RequestException as e:
+                st.error(f"An error occurred while making the prediction: {str(e)}")
 
-# Toggle for automatic prediction
-auto_predict = st.toggle("Enable automatic prediction", value=True)
+    # Add some information about the prediction model
+    st.markdown("---")
+    st.markdown(
+        "<h3 style='text-align: center;'>About the Prediction Model</h3>",
+        unsafe_allow_html=True,
+    )
+    st.write(
+        """
+    This earthquake prediction model uses machine learning algorithms trained on historical earthquake data. 
+    It takes into account factors such as geographical location and time to predict the magnitude and depth of potential earthquakes, 
+    as well as the probability of a significant seismic event.
 
-# Function to make prediction
-def make_prediction():
-    input_data = {
-        "latitude": st.session_state.latitude,
-        "longitude": st.session_state.longitude,
-        "date": prediction_date.isoformat()
-    }
-    try:
-        response = requests.post(f"{API_URL}/predict_earthquake", json=input_data)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        result = response.json()
-        
-        st.success("Prediction successful!")
-        st.write(f"Predicted Magnitude: {result['predicted_magnitude']:.2f}")
-        st.write(f"Predicted Depth: {result['predicted_depth']:.2f} km")
-        st.write(f"Probability of Significant Earthquake: {result['significant_probability']:.2%}")
-        
-        # Interpret the significance probability
-        if result['significant_probability'] > 0.7:
-            st.warning("High probability of a significant earthquake!")
-        elif result['significant_probability'] > 0.3:
-            st.info("Moderate probability of a significant earthquake.")
-        else:
-            st.info("Low probability of a significant earthquake.")
-    except requests.exceptions.RequestException as e:
-        error_message = f"An error occurred during prediction: {str(e)}"
-        if hasattr(e, 'response') and e.response is not None:
-            error_message += f"\nResponse status code: {e.response.status_code}"
-            if hasattr(e.response, 'text'):
-                error_message += f"\nResponse content: {e.response.text}"
-        st.error(error_message)
+    Please note that earthquake prediction is a complex field with inherent uncertainties. 
+    This model provides estimates based on patterns in historical data, but cannot guarantee the occurrence or non-occurrence of seismic events.
+    """
+    )
 
-# Prediction logic
-if auto_predict:
-    make_prediction()
-else:
-    if st.button("Predict Earthquake"):
-        make_prediction()
 
-st.sidebar.info("""
-    This is a demo of the Earthquake Prediction System. 
-    
-    How to use:
-    1. Click on the map to select a location.
-    2. Select a date for the prediction.
-    3. Toggle automatic prediction on/off.
-    4. If automatic prediction is off, click 'Predict Earthquake' to get results.
-    
-    The system predicts the magnitude and depth of a potential earthquake, 
-    as well as the probability of it being a significant event (magnitude >= 5.0).
-""")
+if __name__ == "__main__":
+    main()

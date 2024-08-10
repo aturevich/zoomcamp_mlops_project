@@ -1,18 +1,94 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Earthquake Prediction Monitoring</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Earthquake Prediction Dashboard</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1, h2 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+    </style>
 </head>
 <body>
-    <h1>Earthquake Prediction Monitoring</h1>
-    <nav>
-        <ul>
-            <li><a href="/static/index.html">Static Dashboard</a></li>
-            <li><a href="/evidently-dashboard">Evidently Dashboard</a></li>
-        </ul>
-    </nav>
-    <div id="content">
-        <!-- Your existing static dashboard content -->
+    <div class="container">
+        <h1>Earthquake Prediction Dashboard</h1>
+        
+        <div>
+            <h2>Recent Predictions</h2>
+            <table id="recentPredictions">
+                <thead>
+                    <tr id="tableHeader">
+                        <!-- Header will be dynamically populated -->
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+        
+        <div>
+            <h2>Evidently Dashboard</h2>
+            {{ dashboard_html | safe }}
+        </div>
     </div>
+
+    <script>
+    function populateTableHeader(data) {
+        if (data && data.length > 0) {
+            var headerRow = $('#tableHeader');
+            headerRow.empty();
+            for (var key in data[0]) {
+                if (data[0].hasOwnProperty(key)) {
+                    headerRow.append($('<th>').text(key));
+                }
+            }
+        }
+    }
+
+    function fetchRecentPredictions() {
+        $.getJSON('/monitoring/recent_predictions', function(data) {
+            console.log("Received data:", data);
+            var tableBody = $('#recentPredictions tbody');
+            tableBody.empty();  // Clear existing rows
+            
+            if (data && data.length > 0) {
+                populateTableHeader(data);
+                data.forEach(function(prediction) {
+                    console.log("Processing prediction:", prediction);
+                    var row = $('<tr>');
+                    for (var key in prediction) {
+                        if (prediction.hasOwnProperty(key)) {
+                            var value = prediction[key];
+                            if (typeof value === 'number') {
+                                value = value.toFixed(4);
+                            }
+                            row.append($('<td>').text(value));
+                        }
+                    }
+                    tableBody.append(row);
+                });
+            } else {
+                console.log("No data received or empty data array");
+                tableBody.append('<tr><td colspan="6">No recent predictions available</td></tr>');
+            }
+        }).fail(function(jqXHR, textStatus, errorThrown) {
+            console.error("Error fetching recent predictions:", textStatus, errorThrown);
+            $('#recentPredictions tbody').html('<tr><td colspan="6">Error fetching recent predictions</td></tr>');
+        });
+    }
+
+    $(document).ready(function() {
+        fetchRecentPredictions();
+        // Optionally, refresh the table periodically:
+        // setInterval(fetchRecentPredictions, 60000);  // Refresh every minute
+    });
+    </script>
 </body>
 </html>

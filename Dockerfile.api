@@ -1,17 +1,9 @@
-FROM python:3.10-slim
-
-WORKDIR /app
-
-# Install pipenv
-RUN pip install pipenv
-
-# Copy Pipfile and Pipfile.lock
-COPY Pipfile Pipfile.lock ./
-
-# Install dependencies
-RUN pipenv install --system --deploy
+FROM earthquake_prediction_base:latest
 
 COPY src /app/src
 COPY models /app/models
+COPY static /app/static
+
+EXPOSE 8000
 
 CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
